@@ -4,8 +4,8 @@ import serial
 import threading
 import time
 
-# Cambia esto por el puerto correcto donde esté conectado tu Arduino
-SERIAL_PORT = 'COM3'  # En Linux/Mac puede ser '/dev/ttyUSB0' o similar
+
+SERIAL_PORT = 'COM3'  
 BAUD_RATE = 115200
 
 class HuskyLensGUI:
@@ -21,21 +21,18 @@ class HuskyLensGUI:
         self.clear_button = tk.Button(root, text="Limpiar pantalla", command=self.clear_text)
         self.clear_button.pack(pady=(0,10))
 
-        # Inicializamos el puerto serial
         try:
             self.ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
         except serial.SerialException as e:
             self.append_text(f"Error abriendo puerto serial: {e}\n")
             self.ser = None
 
-        # Usamos un hilo para leer datos y no congelar la GUI
         if self.ser:
             self.running = True
             self.thread = threading.Thread(target=self.read_serial)
             self.thread.daemon = True
             self.thread.start()
 
-        # Cerrar bien al cerrar ventana
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
     def append_text(self, text):
@@ -70,3 +67,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = HuskyLensGUI(root)
     root.mainloop()
+
