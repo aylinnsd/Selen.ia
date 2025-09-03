@@ -1,0 +1,112 @@
+import tkinter as tk
+from tkinter import scrolledtext
+import serial
+import threading
+import time
+import re
+
+
+SERIAL_PORT = 'COM3'   # recordar cambiar el puerto dependiendo de la compu de xime com4
+BAUD_RATE = 115200
+
+ID_LABELS = {
+    1: "Manzana",
+    2: "Banana",
+    3: "Cereza",
+    4: "ObjetoX",
+}
+
+# Colores de la interfaz de la pag
+BG_COLOR = "#0B0B3B"
+TEXT_COLOR = "#E0B0FF"
+HEADER_COLOR = "#9B59B6"
+BUTTON_COLOR = "#FF6F61"
+BUTTON_HOVER = "#FF9A76"
+SCROLL_BG = "#1C1C3C"
+
+class SelenIAGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("SelenIA")
+        self.root.geometry("800x600")
+        self.root.configure(bg=BG_COLOR)
+
+        # Encabezado
+        self.header = tk.Label(root, text="SELENIA - Exploración de Objetos", font=("Arial Black", 20),
+                               fg=TEXT_COLOR, bg=HEADER_COLOR, padx=10, pady=10)
+        self.header.pack(fill=tk.X, pady=(10, 20))
+
+        # Área de texto
+        self.text_area = scrolledtext.ScrolledText(root, width=80, height=20, font=("Consolas", 12),
+                                                   bg=SCROLL_BG, fg=TEXT_COLOR, insertbackground=TEXT_COLOR)
+        self.text_area.pack(padx=20, pady=10)
+        self.text_area.config(state=tk.DISABLED)
+
+        # Botón para poder limpiar
+        self.clear_button = tk.Button(root, text="Limpiar pantalla", font=("Arial", 14),
+                                      bg=BUTTON_COLOR, fg="white", activebackground=BUTTON_HOVER,
+                                      command=self.clear_text)
+        self.clear_button.pack(pady=15)
+
+        # Inicializar serial
+        try:
+            self.ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=0.1)
+            self.append_text(f"Conectado a {SERIAL_PORT} a {BAUD_RATE} baudios.\n")
+        except serial.SerialException as e:
+            self.append_text(f"Error abriendo puerto serial: {e}\n")
+            self.ser = None
+
+        if self.ser:
+            self.running = True
+            self.thread = threading.Thread(target=self.read_serial)
+            self.thread.daemon = True
+            self.thread.start()
+
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+
+    def append_text(self, text):
+        self.text_area.config(state=tk.NORMAL)
+        self.text_area.insert(tk.END, text)
+        self.text_area.see(tk.END)
+        self.text_area.config(state=tk.DISABLED)
+
+    def clear_text(self):
+        self.text_area.config(state=tk.NORMAL)
+        self.text_area.delete('1.0', tk.END)
+        self.text_area.config(state=tk.DISABLED)
+
+    def read_serial(self):
+        while self.running:
+            try:
+                line = self.ser.readline().decode('utf-8', errors='ignore').strip()
+                if line:
+                    # Regex para extraer tooodos los objetos detectados
+                    matches = re.findall(r'ID[: ](\d+).*X[: ](\d+).*Y[: ](\d+).*W[: ](\d+).*H[: ](\d+)', line)
+                    if matches:
+                        for match in matches:
+                            obj_id = int(match[0])
+                            x = int(match[1])
+                            y = int(match[2])
+                            w = int(match[3])
+                            h = int(match[4])
+                            label = ID_LABELS.get(obj_id, f"ID_{obj_id}")
+                            self.append_text(f"{label} -> X:{x} Y:{y} W:{w} H:{h}\n")
+                    else:
+                        self.append_text(f"{line}\n")
+            except Exception as e:
+                self.append_text(f"Error leyendo serial: {e}\n")
+                break
+
+            time.sleep(0.1)  # Actualización rápida
+
+    def on_close(self):
+        self.running = False
+        if self.ser and self.ser.is_open:
+            self.ser.close()
+        self.root.destroy()
+
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SelenIAGUI(root)
+    root.mainloop()
