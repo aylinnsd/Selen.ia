@@ -1,0 +1,161 @@
+#include <Servo.h>
+
+/* ====== Pines ====== */
+const int PIN_SERVO_IZQ = 9;
+const int PIN_SERVO_DER = 11;
+const int PIN_GARRA     = 10;
+const int PIN_BRAZO     = 5;   // nuevo: servo del brazo
+const int PIN_TRIG      = 7;
+const int PIN_ECHO      = 8;
+
+/* ====== Servos ====== */
+Servo sIzq, sDer, sGarra, sBrazo;
+
+/* ====== Pulsos ruedas ====== */
+const int STOP_US          = 1500;
+const int IZQ_FORWARD_US   = 1250;
+const int DER_FORWARD_US   = 1750;
+const int IZQ_BACKWARD_US  = 1750;
+const int DER_BACKWARD_US  = 1250;
+
+/* ====== Garra ====== */
+const int GARRA_ABIERTA    = 120;
+const int GARRA_CERRADA    = 40;
+
+/* ====== Brazo ====== */
+const int BRAZO_NEUTRO     = 15;  // posición horizontal inicial
+const int BRAZO_SOSTENER   = 15; // ajusta: ángulo firme para sostener peso
+
+/* ====== Tiempos ====== */
+const int MOVE_TIME_MS      = 2000;
+int       TURN_RIGHT_90_MS  = 1500;
+int       TURN_LEFT_90_MS   = 1400;
+const int BACK_OFF_TIME_MS  = 1000;
+
+/* ====== Ultrasónico ====== */
+const long TIMEOUT_US        = 30000;
+const int  HAND_NEAR_CM      = 20;
+const int  CONFIRM_READS     = 3;
+
+/* ====== Utilidades ====== */
+void wheelsStop() {
+  sIzq.writeMicroseconds(STOP_US);
+  sDer.writeMicroseconds(STOP_US);
+}
+
+void moveForward_ms(int ms) {
+  sIzq.writeMicroseconds(IZQ_FORWARD_US);
+  sDer.writeMicroseconds(DER_FORWARD_US);
+  delay(ms);
+  wheelsStop();
+  delay(300);
+}
+
+void moveBackward_ms(int ms) {
+  sIzq.writeMicroseconds(IZQ_BACKWARD_US);
+  sDer.writeMicroseconds(DER_BACKWARD_US);
+  delay(ms);
+  wheelsStop();
+  delay(300);
+}
+
+void turnRight90() {
+  sIzq.writeMicroseconds(IZQ_FORWARD_US);
+  sDer.writeMicroseconds(DER_BACKWARD_US);
+  delay(TURN_RIGHT_90_MS);
+  wheelsStop();
+  delay(300);
+}
+
+void turnLeft90() {
+  sIzq.writeMicroseconds(IZQ_BACKWARD_US);
+  sDer.writeMicroseconds(DER_FORWARD_US);
+  delay(TURN_LEFT_90_MS);
+  wheelsStop();
+  delay(300);
+}
+
+/* ====== Ultrasónico ====== */
+long readEchoUs() {
+  digitalWrite(PIN_TRIG, LOW);  delayMicroseconds(2);
+  digitalWrite(PIN_TRIG, HIGH); delayMicroseconds(10);
+  digitalWrite(PIN_TRIG, LOW);
+  return pulseIn(PIN_ECHO, HIGH, TIMEOUT_US);
+}
+
+int distanceCm() {
+  long d = readEchoUs();
+  if (d == 0) return 9999;
+  return d / 58;
+}
+
+/* ====== Secuencia ====== */
+void runSequence() {
+  // 1) Abrir garra
+  sGarra.write(GARRA_ABIERTA);
+  sBrazo.write(BRAZO_NEUTRO);  // brazo listo
+  delay(800);
+
+  // 2) Avanzar
+  moveForward_ms(MOVE_TIME_MS);
+
+  // 3) Cerrar garra
+  sGarra.write(GARRA_CERRADA);
+  delay(800);
+
+  // 4) Mantener brazo firme para soportar peso
+  sBrazo.write(BRAZO_SOSTENER);
+
+  // 5) Retroceder
+  moveBackward_ms(MOVE_TIME_MS);
+
+  // 6) Giro 90° derecha
+  turnRight90();
+
+  // 7) Abrir garra (soltar)
+  sGarra.write(GARRA_ABIERTA);
+  delay(800);
+
+  // 8) Retroceso corto
+  moveBackward_ms(BACK_OFF_TIME_MS);
+
+  // 9) Cerrar garra nuevamente
+  sGarra.write(GARRA_CERRADA);
+  delay(800);
+
+  // 10) Giro 90° izquierda (volver a orientación inicial)
+  turnLeft90();
+
+  // Brazo vuelve a neutro
+  sBrazo.write(BRAZO_NEUTRO);
+}
+
+/* ====== Setup ====== */
+void setup() {
+  sIzq.attach(PIN_SERVO_IZQ);
+  sDer.attach(PIN_SERVO_DER);
+  sGarra.attach(PIN_GARRA);
+  sBrazo.attach(PIN_BRAZO);
+
+  pinMode(PIN_TRIG, OUTPUT);
+  pinMode(PIN_ECHO, INPUT);
+
+  wheelsStop();
+  sGarra.write(GARRA_CERRADA);
+  sBrazo.write(BRAZO_NEUTRO);
+  delay(500);
+}
+
+/* ====== Loop ====== */
+void loop() {
+  int ok = 0;
+  while (ok < CONFIRM_READS) {
+    int cm = distanceCm();
+    if (cm <= HAND_NEAR_CM) ok++;
+    else ok = 0;
+    delay(60);
+  }
+
+  runSequence();
+  delay(1000);
+}
